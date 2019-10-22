@@ -1,3 +1,107 @@
+def CRMS_hydro_daily_calcs(site, start_year, end_year, obs_type, topdir, write_hdr):
+    import numpy as np
+    daypath = r'%s\clean_daily\%s_daily_English.csv' % (topdir,site)
+    hourpath = r'%s\clean_hourly\%s_hourly_English.csv' % (topdir,site)
+
+    # initialize empty dictionaries
+    d_sum_wt = {}
+    d_ct = {}
+    d_min = {}
+    d_max = {}  
+    d_ave = {}
+    d_stdv = {}
+    d_hr_resid = {}
+    
+    d_sum_wt[site] = {}
+    d_ct[site] = {}
+    d_min[site] = {}
+    d_max[site] = {} 
+    d_ave[site] = {}
+    d_stdv[site] = {}
+    d_hr_resid[site] = {}
+    
+    for y in range(start_year, end_year+1):
+        d_sum_wt[site][y] = {}
+        d_ct[site][y] = {}
+        d_min[site][y] = {}
+        d_max[site][y] = {}
+        d_ave[site][y] = {}
+        d_stdv[site][y] = {}
+        d_hr_resid[site][y] = {}
+        
+        for m in range(1,13):
+            d_sum_wt[site][y][m] = {}
+            d_ct[site][y][m] = {}
+            d_min[site][y][m] = {}
+            d_max[site][y][m] = {}
+            d_ave[site][y][m] = {}
+            d_stdv[site][y][m] = {}
+            d_hr_resid[site][y][m] = {}
+
+            dom = {}
+            dom[1] = 31
+            if year in range(2000,4001,4):      # not Y4K compliant!!!
+                dom[2] = 29
+            else:
+                dom[2] = 28
+            dom[3] = 31
+            dom[4] = 30
+            dom[5] = 31
+            dom[6] = 30
+            dom[7] = 31
+            dom[8] = 31
+            dom[9] = 30
+            dom[10] = 31
+            dom[11] = 30
+            dom[12] = 31
+           
+            for d in range(1,dom[m]+1):
+                d_sum_wt[site][y][m][d] = 0.0
+                d_ct[site][y][m][d] = 0.0
+                d_min[site][y][m][d] = 9999.9
+                d_max[site][y][m][d] = 0.0
+                d_ave[site][y][m][d] = 0.0
+                d_stdv[site][y][m][d] = 0.0
+                d_hr_resid[site][y][m][d] = 0.0
+
+
+
+
+    # read in daily data and save in daily dictionaries
+    dd = np.genfromtxt(daypath,delimiter=',',dtype='str',skip_header=1)
+    for row in dd:
+        date = row[1].split('/')
+        mon = int(date[0])
+        day = int(date[1])
+        yr = int(date[2])
+        if obs_type.split('_')[0] == 'salinity':
+            av = row[2]
+            mn = row[4]
+            mx = row[5]
+            ct = row[7]
+        elif obs_type.split('_')[0] == 'stage':
+            av = row[8]
+            mn = row[10]
+            mx = row[11]
+            ct = row[13]
+
+        if yr in range(start_year,end_year+1):
+            if int(ct == 0):
+                tdr = 'na'
+                ctflg = ''
+            else:
+                try:
+                    tdr = float(mx) - float(mn)
+                    if int(ct) != 24:
+                        ctflg = '*'
+                    else:
+                        ctflg = ''
+                except:
+                    tdr = 'na'
+                    ctflg = ''
+  
+        
+
 def CRMS_hydro_stats(site, start_year, end_year, obs_type, topdir, write_hdr):
     import numpy as np
     daypath = r'%s\clean_daily\%s_daily_English.csv' % (topdir,site)
