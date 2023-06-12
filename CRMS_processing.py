@@ -6,9 +6,10 @@ import numpy as np
 import os
 import sys
 import CRMS_stats
+from builtins import Exception
 
-topdir = r'E:\CRMS'
-masterCRMS = r'%s\CRMS_Continuous_Hydrographic_20190428.csv' % topdir
+topdir = r'E:\CRMS_2006-2022'
+masterCRMS = r'%s\CRMS_Continuous_Hydrographic_20230608.csv' % topdir
 masterCRMSlist = r'%s\CRMS_sites.csv' % topdir
 sites = np.genfromtxt(masterCRMSlist,dtype='str')
 
@@ -16,12 +17,12 @@ sites = np.genfromtxt(masterCRMSlist,dtype='str')
 # split_files is a flag to separate the master CRMS bulk download file into individual files for each site
 # if set to 'no' the split files must already exist
 # if set to 'yes', the master CRMS bulk download file will be parsed into individual csvs for each CRMS site that contain the raw data as downloaded
-split_files = 'no' # 'yes'
+split_files = 'no' #'no' # 'yes'
 
 # build_files is a flag to build new daily and hourly data from the raw split files
 # if set to 'no' the split daily and hourly clean files must already exist and the stats will be generated from those files
 # if set to 'yes' the split hourly raw files will be used to generate the clean daily and hourly summary files
-build_files = 'no' # 'yes'
+build_files = 'yes' #'no' # 'yes'
 
 if split_files == 'no':
     folds = ['clean_hourly','clean_daily']
@@ -32,17 +33,17 @@ else:
 for fol in folds:
     if os.path.exists(r'%s\%s' % (topdir,fol)) == True:
         print('\n\n\n\noutput directory \%s already exists in %s !!!!' % (fol,topdir))
-        print(' \n\ndo you want to....\n(a) continue with that folder and re-write old files \n(b) rename folder here \n(c) quit program and handle yourself? ')
-        warn = input('pick one: <  a    b    c  >')
+        print(' \n\ndo you want to....\n(1) continue with that folder and re-write old files \n(2) rename folder here \n(3) quit program and handle yourself? ')
+        warn = input('pick one: <  1    2    3  >')
         if warn == 'a':
-            print('\nyou chose to continue.  \n(a) you sure? \n(b) or would you prefer to rename the folder \n(c) or just quit, already?')
-            warn = input('pick one: <  a    b    c  >')
+            print('\nyou chose to continue.  \n(1) you sure? \n(2) or would you prefer to rename the folder \n(3) or just quit, already?')
+            warn = str(input('pick one: <  1    2    3  >'))
 
         if warn == 'c':
             print('\nsee ya later.')
             sys.exit()
         elif warn == 'b':
-            apptext = input('what word would you like to append to the folder name? (e.g. "old")')
+            apptext = str(input('what word would you like to append to the folder name? please reply within quotes (e.g. "old").'))
             old = r'%s\%s' % (topdir,fol)
             new = r'%s\%s_%s' % (topdir,fol,apptext)
             print('\n renaming %s to %s' % (old, new))
@@ -55,35 +56,56 @@ for fol in folds:
 
 
 
+# The below script parses the bulk data download into individual files - it requires that the file is structured such that the data for each CRMS site is lumped (vertically together)
 if split_files == 'yes':
     print('splitting master CRMS file by site ID')
-    data_by_site = {}
 
-    for s in sites:
-        data_by_site[s] = []
+#    data_by_site = {}
+#    for s in sites:
+#        data_by_site[s] = []
 
     with open(masterCRMS,mode='rt') as inf:
         nline = 0
+        old_site = 'old'
+        current_site = 'current'
+        data_by_site = []
         for line in inf:
             if nline == 0:
                 hdr = line
             else:
-                sin = line.split(',')[0]
-                try:
-                    data_by_site[sin].append(line)
-                except:
-                    print('  ! could not find key for %s' % sin)
+                current_site = line.split(',')[0]
+
+                if current_site != old_site:
+                    # if on to a new site, must first print out old site data to new file
+                    print(' - writing individual CRMS file for %s' % old_site)
+                    rawpath = r'%s\raw\%s_raw.csv' % (topdir,old_site)
+                    with open(rawpath, mode='w') as splitfile:
+                        splitfile.write(hdr)
+                        for val in data_by_site:
+                            splitfile.write(val)
+
+                    # once old data is written, re-initialize data for new site
+                    print('processing new site: %s' % current_site)
+                    data_by_site = []
+
+                else:   # still on current site 
+                    try:
+                        data_by_site.append(line)
+                    except Exception as e:
+                        print(e)
+                    
+            old_site = current_site
             nline += 1
 
-    print('writing individual CRMS files')
-
-    for site in sites:
-        print('   - site %s' % site)
-        rawpath = r'%s\raw\%s_raw.csv' % (topdir,site)
-        with open(rawpath, mode='w') as splitfile:
-            splitfile.write(hdr)
-            for val in data_by_site[site]:
-                splitfile.write(val)
+#    print('writing individual CRMS files')
+#
+#    for site in sites:
+#        print('   - site %s' % site)
+#        rawpath = r'%s\raw\%s_raw.csv' % (topdir,site)
+#        with open(rawpath, mode='w') as splitfile:
+#            splitfile.write(hdr)
+#            for val in data_by_site[site]:
+#                splitfile.write(val)
 
     print('done splitting CRMS data by site\n')
 else:
@@ -216,9 +238,9 @@ for site in sites:
     else:
         write_hdr = 'False'
     print('  building stage summary stats tables')
-    CRMS_stats.CRMS_hydro_stats(site,2006,2019,'stage_ft_NAVD88-g12a',topdir,write_hdr)
+    CRMS_stats.CRMS_hydro_stats(site,2006,2023,'stage_ft_NAVD88-g12a',topdir,write_hdr)
     print('  building salinity summary stats tables')
-    CRMS_stats.CRMS_hydro_stats(site,2006,2019,'salinity_ppt',topdir,write_hdr)
+    CRMS_stats.CRMS_hydro_stats(site,2006,2023,'salinity_ppt',topdir,write_hdr)
     print('  building moving window salinity table')
-    CRMS_stats.CRMS_moving_window(site,2006,2019,'salinity_ppt',topdir,write_hdr)   
+    CRMS_stats.CRMS_moving_window(site,2006,2023,'salinity_ppt',topdir,write_hdr)   
 
