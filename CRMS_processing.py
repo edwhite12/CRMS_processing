@@ -8,9 +8,11 @@ import sys
 import CRMS_stats
 from builtins import Exception
 
-topdir = r'E:\CRMS_2006-2022'
-masterCRMS = r'%s\CRMS_Continuous_Hydrographic_20230608.csv' % topdir
+topdir = r'E:\CRMS_2006-2023'
+masterCRMS = r'%s\CRMS_Continuous_Hydrographic_20231027.csv' % topdir
 masterCRMSlist = r'%s\CRMS_sites.csv' % topdir
+#geoidfile = r'%s\CRMS_GEOID99_TO_GEOID12A.csv' % topdir
+geoidfile = r'%s\Hydro Shift from 99-12B.csv' % topdir
 sites = np.genfromtxt(masterCRMSlist,dtype='str')
 
 
@@ -22,38 +24,37 @@ split_files = 'no' #'no' # 'yes'
 # build_files is a flag to build new daily and hourly data from the raw split files
 # if set to 'no' the split daily and hourly clean files must already exist and the stats will be generated from those files
 # if set to 'yes' the split hourly raw files will be used to generate the clean daily and hourly summary files
-build_files = 'yes' #'no' # 'yes'
+build_files = 'no' #'no' # 'yes'
 
 if split_files == 'no':
     folds = ['clean_hourly','clean_daily']
 else:
     folds = ['raw','clean_hourly','clean_daily']
 
-
-for fol in folds:
-    if os.path.exists(r'%s\%s' % (topdir,fol)) == True:
-        print('\n\n\n\noutput directory \%s already exists in %s !!!!' % (fol,topdir))
-        print(' \n\ndo you want to....\n(1) continue with that folder and re-write old files \n(2) rename folder here \n(3) quit program and handle yourself? ')
-        warn = input('pick one: <  1    2    3  >')
-        if warn == 'a':
-            print('\nyou chose to continue.  \n(1) you sure? \n(2) or would you prefer to rename the folder \n(3) or just quit, already?')
-            warn = str(input('pick one: <  1    2    3  >'))
-
-        if warn == 'c':
-            print('\nsee ya later.')
-            sys.exit()
-        elif warn == 'b':
-            apptext = str(input('what word would you like to append to the folder name? please reply within quotes (e.g. "old").'))
-            old = r'%s\%s' % (topdir,fol)
-            new = r'%s\%s_%s' % (topdir,fol,apptext)
-            print('\n renaming %s to %s' % (old, new))
-            os.rename(old,new)
+    for fol in folds:
+        if os.path.exists(r'%s\%s' % (topdir,fol)) == True:
+            print('\n\n\n\noutput directory \%s already exists in %s !!!!' % (fol,topdir))
+            print(' \n\ndo you want to....\n(a) continue with that folder and re-write old files \n(b) rename folder here \n(c) quit program and handle yourself? ')
+            warn = input('pick one: <  a    b    c  >')
+            if warn == 'a':
+                print('\nyou chose to continue.  \n(a) you sure? \n(b) or would you prefer to rename the folder \n(c) or just quit, already?')
+                warn = str(input('pick one: <  a    b    c  >'))
+    
+            if warn == 'c':
+                print('\nsee ya later.')
+                sys.exit()
+            elif warn == 'b':
+                apptext = str(input('what word would you like to append to the folder name? please reply within quotes (e.g. "old").'))
+                old = r'%s\%s' % (topdir,fol)
+                new = r'%s\%s_%s' % (topdir,fol,apptext)
+                print('\n renaming %s to %s' % (old, new))
+                os.rename(old,new)
+                os.mkdir(r'%s\%s' % (topdir,fol))
+            elif warn == 'a':
+                print('\nOK this will overwrite any old data...continuing on.')
+        else:
             os.mkdir(r'%s\%s' % (topdir,fol))
-        elif warn == 'a':
-            print('\nOK this will overwrite any old data...continuing on.')
-    else:
-        os.mkdir(r'%s\%s' % (topdir,fol))
-
+    
 
 
 # The below script parses the bulk data download into individual files - it requires that the file is structured such that the data for each CRMS site is lumped (vertically together)
@@ -120,7 +121,6 @@ for site in sites:
     rawpath = r'%s\raw\%s_raw.csv' % (topdir,site)
     hrpath = r'%s\clean_hourly\%s_hourly_English.csv' % (topdir,site)
     daypath = r'%s\clean_daily\%s_daily_English.csv' % (topdir,site)
-    geoidfile = r'%s\CRMS_GEOID99_TO_GEOID12A.csv' % topdir
 
     if build_files == 'yes':
         print('building new clean daily and hourly files to perform stats calculations')
@@ -237,10 +237,10 @@ for site in sites:
         write_hdr = 'True'
     else:
         write_hdr = 'False'
-    print('  building stage summary stats tables')
-    CRMS_stats.CRMS_hydro_stats(site,2006,2023,'stage_ft_NAVD88-g12a',topdir,write_hdr)
-    print('  building salinity summary stats tables')
-    CRMS_stats.CRMS_hydro_stats(site,2006,2023,'salinity_ppt',topdir,write_hdr)
+#    print('  building stage summary stats tables')
+#    CRMS_stats.CRMS_hydro_stats(site,2006,2023,'stage_ft_NAVD88-g12b',topdir,write_hdr)
+#    print('  building salinity summary stats tables')
+#    CRMS_stats.CRMS_hydro_stats(site,2006,2023,'salinity_ppt',topdir,write_hdr)
     print('  building moving window salinity table')
     CRMS_stats.CRMS_moving_window(site,2006,2023,'salinity_ppt',topdir,write_hdr)   
 

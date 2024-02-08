@@ -114,7 +114,9 @@ def CRMS_hydro_stats(site, start_year, end_year, obs_type, topdir, write_hdr):
     d_max = {}  
     d_ave = {}
     d_stdv = {}
+    d_mdn = {}
     d_hr_resid = {}
+    d_hr_list = {}
     
     d_sum_wt[site] = {}
     d_ct[site] = {}
@@ -122,7 +124,9 @@ def CRMS_hydro_stats(site, start_year, end_year, obs_type, topdir, write_hdr):
     d_max[site] = {} 
     d_ave[site] = {}
     d_stdv[site] = {}
+    d_mdn[site] = {}
     d_hr_resid[site] = {}
+    d_hr_list[site] = {}
     
     for y in range(start_year, end_year+1):
         d_sum_wt[site][y] = {}
@@ -131,7 +135,9 @@ def CRMS_hydro_stats(site, start_year, end_year, obs_type, topdir, write_hdr):
         d_max[site][y] = {}
         d_ave[site][y] = {}
         d_stdv[site][y] = {}
+        d_mdn[site][y] = {}
         d_hr_resid[site][y] = {}
+        d_hr_list[site][y] = {}
         
         for m in range(1,13):
             d_sum_wt[site][y][m] = 0.0
@@ -140,7 +146,9 @@ def CRMS_hydro_stats(site, start_year, end_year, obs_type, topdir, write_hdr):
             d_max[site][y][m] = 0.0
             d_ave[site][y][m] = 0.0
             d_stdv[site][y][m] = 0.0
+            d_mdn[site][y][m] = 0.0
             d_hr_resid[site][y][m] = 0.0
+            d_hr_list[site][y][m] = []
             
     # read in daily data and save in monthly dictionaries
     dd = np.genfromtxt(daypath,delimiter=',',dtype='str',skip_header=1)
@@ -190,6 +198,8 @@ def CRMS_hydro_stats(site, start_year, end_year, obs_type, topdir, write_hdr):
             if hval != 'na':
                 if d_ave[site][yr][mon] != 'na':
                     d_hr_resid[site][yr][mon] += (float(hval)-d_ave[site][yr][mon])**2.0
+                d_hr_list[site][yr][mon].append(float(hval))
+    
     # calculate standard deviation
     for y in range(start_year,end_year+1):
         for m in range(1,13):
@@ -198,20 +208,29 @@ def CRMS_hydro_stats(site, start_year, end_year, obs_type, topdir, write_hdr):
             except:
                 d_stdv[site][y][m] = 'na'
     
+    # calculate median
+    for y in range(start_year,end_year+1):
+        for m in range(1,13):
+            try:
+                d_mdn[site][y][m] = np.median(d_hr_list[site][y][m])
+            except:
+                d_mdn[site][y][m] = 'na'
+    
+    
     # write output summary tables and save to file
-    dicts = [d_ave,d_stdv,d_min,d_max]
-    outs = ['%s_ave' % obs_type,'%s_stdev' % obs_type,'%s_min' % obs_type,'%s_max' % obs_type]
+    dicts = [d_ave,d_stdv,d_min,d_max,d_mdn]
+    outs = ['%s_ave' % obs_type,'%s_stdev' % obs_type,'%s_min' % obs_type,'%s_max' % obs_type,'%s_median' % obs_type]
     for dn in range(0,len(dicts)):
         d = dicts[dn]
+        
+        # write gridded output file
         outpath = r'%s\CRMS_%s.csv' % (topdir,outs[dn])
-
         with open(outpath,mode='a') as osf:
             if write_hdr == 'True':
                 header = ('Site,month')
                 for y in range(start_year,end_year+1):
                     header = '%s,%s' % (header,y)
-                osf.write('%s\n' % header)
-           
+                _ = osf.write('%s\n' % header)
             for m in range(1,13):
                 oline = '%s,%02d' % (site,m)
                 for y in range(start_year,end_year+1):
@@ -223,12 +242,32 @@ def CRMS_hydro_stats(site, start_year, end_year, obs_type, topdir, write_hdr):
                             s_val = 'na'
                     else:
                         s_val = 'na'
-
                     oline = '%s,%s' % (oline,s_val)
+                _ = osf.write('%s\n' % oline)
+        
+        #write stacked output file
+        outpath2 = r'%s\CRMS_%s_stacked.csv' % (topdir,outs[dn])
+        with open(outpath2,mode='a') as osf2:
+            if write_hdr == 'True':
+                header = ('Site,MM-YYYY,Value')
+                _ = osf2.write('%s\n' % header)
+            for y in range(start_year,end_year+1):
+                for m in range(1,13):
+                    oline = '%s,%02d-%04d' % (site,m,y)
+                    if d_ct[site][y][m] != 0.0:
+                        f_val = d[site][y][m]
+                        if f_val != 'na':
+                            try:
+                                s_val = '%0.4f' % f_val
+                            except:
+                                s_val = 'na'
+                        else:
+                            s_val = 'na'
+                    else:
+                        s_val = 'na'
+                    _ = osf2.write('%s,%s\n' % (oline,s_val))
 
-                osf.write('%s\n' % oline)
-
-    del(d_ave,d_stdv,d_hr_resid,d_sum_wt,d_ct,d_min,d_max,)
+    del(d_ave,d_stdv,d_hr_resid,d_sum_wt,d_ct,d_min,d_max,d_mdn,d_hr_list)
 
 def CRMS_moving_window(site, start_year, end_year, obs_type, topdir, write_hdr):
     import numpy as np
@@ -298,26 +337,55 @@ def CRMS_moving_window(site, start_year, end_year, obs_type, topdir, write_hdr):
             all_data_filled[i] = float(all_data[i])
             all_data_flag[i] = ''
     
+#    # calculate 14-day moving window average using filled data
+#    mov14_ave = []        
+#    for win_end in range(0,len(all_data)):
+#        sum14 = 0.0
+#        if(win_end < 14):
+#            try:
+#                sum14 += all_data_filled[0]
+#            except:
+#                sum14 = 'na'
+#        else:
+#            for i14 in range(0,14):
+#                fildat = all_data_filled[win_end-i14]
+#                try:
+#                    sum14 += float(fildat)
+#                except:
+#                    sum14 = 'na'
+#        if sum14 != 'na':
+#            mov14_ave.append(sum14/14.0)
+#        else:
+#            mov14_ave.append('na')
 
+    # calculate 14-day moving window average using skipping missing data data
     mov14_ave = []        
     for win_end in range(0,len(all_data)):
         sum14 = 0.0
+        cntr = 0
         if(win_end < 14):
-            try:
-                sum14 += all_data_filled[0]
+            try:        # if try fails, that means value of data is 'na' - skip
+                sum14 += float(all_data[0])
+                cntr += 1
             except:
-                sum14 = 'na'
+                sum14 = sum14
+                #sum14 = 'na'
         else:
             for i14 in range(0,14):
-                fildat = all_data_filled[win_end-i14]
-                try:
+                fildat = all_data[win_end-i14]
+                try:    # if try fails, that means value of data is 'na' - skip
                     sum14 += float(fildat)
+                    cntr += 1
                 except:
-                    sum14 = 'na'
-        if sum14 != 'na':
-            mov14_ave.append(sum14/14.0)
+                    sum14 = sum14
+                    #sum14 = 'na'
+        if cntr != 0:
+            mov14_ave.append(sum14/cntr)
         else:
             mov14_ave.append('na')
+
+
+
 
     # convert array of daily timeseries into dictionary
     cntr = 0
@@ -333,6 +401,7 @@ def CRMS_moving_window(site, start_year, end_year, obs_type, topdir, write_hdr):
     #    for i in range(0,len(all_data)):
     #        outf.write('%s,%s,%s,%s\n' % (all_data[i],all_data_filled[i],all_data_flag[i],mov14_ave[i]))
 
+    #write gridded output file
     outpath = r'%s\CRMS_max_14day_ave_%s.csv' % (topdir,obs_type)
     with open(outpath,mode='a') as osf:
         if write_hdr == 'True':
@@ -356,6 +425,24 @@ def CRMS_moving_window(site, start_year, end_year, obs_type, topdir, write_hdr):
                 oline = '%s,%s' % (oline,s_val)
             osf.write('%s\n' % oline)        
 
+    #write stacked output file
+    outpath2 = r'%s\CRMS_max_14day_ave_%s_stacked.csv' % (topdir,obs_type)
+    with open(outpath2,mode='a') as osf2:
+        if write_hdr == 'True':
+            header = ('Site,MM-YYYY,Value')
+            _ = osf2.write('%s\n' % header)
+        for y in range(start_year,end_year+1):
+            for m in range(1,13):
+                oline = '%s,%02d-%04d' % (site,m,y)
+                try:
+                    max_av_14d = 0.0
+                    for d in av_14d[y][m].keys():
+                        max_av_14d = max(av_14d[y][m][d],max_av_14d)
+                    f_val = max_av_14d
+                    s_val = '%0.1f' % f_val
+                except:
+                    s_val = 'na'
 
+                _ = osf2.write('%s,%s\n' % (oline,s_val))
 
             
