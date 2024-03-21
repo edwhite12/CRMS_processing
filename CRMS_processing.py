@@ -154,9 +154,9 @@ for site in sites:
                         if row[10] != '': # try for adjusted salinity
                             sal = row[10]
                             sal_f = 'a'
-                        elif row[9] != '': # if no adjusted salinity - use raw
-                            sal = row[9]
-                            sal_f = 'r'
+                        #elif row[9] != '': # if no adjusted salinity - use raw - COMMENTED OUT - DO NOT WANT TO USE RAW DATA AT ALL, ALWAYS USE ADJUSTED (per LAS)
+                        #    sal = row[9]
+                        #    sal_f = 'r'
                         else:
                             sal = 'na'
                             sal_f = 'na'
