@@ -5,31 +5,35 @@ import os
 import numpy as np
 import os
 import sys
+import datetime as dt
 import CRMS_stats
 from builtins import Exception
 
-topdir = r'E:\CRMS_2006-2023'
-masterCRMS = r'%s\CRMS_Continuous_Hydrographic_20231027.csv' % topdir
-masterCRMSlist = r'%s\CRMS_sites.csv' % topdir
-#geoidfile = r'%s\CRMS_GEOID99_TO_GEOID12A.csv' % topdir
-geoidfile = r'%s\Hydro Shift from 99-12B.csv' % topdir
+################################################################
+####                    SET THE SETTINGS                    ####
+################################################################
+
+yr_start = 2006
+yr_end = 2024
+
+topdir = 'E:/CRMS_%04d-%04d' % (yr_start,yr_end)
+masterCRMS = '%s/Full_Continuous_Hydrographic_20250117.csv' % topdir
+masterCRMSlist = '%s/CRMS_sites.csv' % topdir
+geoidfile = '%s/Hydro Shift from 99-12B.csv' % topdir  # '%s/CRMS_GEOID99_TO_GEOID12A.csv' % topdir
+survey_subsidence_file = '%s/CRMS_survey_dates_subsidence_rates.csv' % topdir
+sub_conv = 0.001/0.3048 # subsidence rates are provided in mm/yr - hourly output files with corrected subsidence need to be in feet
+
+split_files = 'no'          # split_files is a flag to separate the master CRMS bulk download file into individual files for each site; if set to 'no' the split files must already exist; 
+build_files = 'yes'          # build_files is a flag to build new daily and hourly data from the raw split files; if set to 'no' the split daily and hourly clean files must already exist and the stats will be generated from those files
+
 sites = np.genfromtxt(masterCRMSlist,dtype='str')
 
 
-# split_files is a flag to separate the master CRMS bulk download file into individual files for each site
-# if set to 'no' the split files must already exist
-# if set to 'yes', the master CRMS bulk download file will be parsed into individual csvs for each CRMS site that contain the raw data as downloaded
-split_files = 'no' #'no' # 'yes'
-
-# build_files is a flag to build new daily and hourly data from the raw split files
-# if set to 'no' the split daily and hourly clean files must already exist and the stats will be generated from those files
-# if set to 'yes' the split hourly raw files will be used to generate the clean daily and hourly summary files
-build_files = 'no' #'no' # 'yes'
-
-if split_files == 'no':
-    folds = ['clean_hourly','clean_daily']
-else:
-    folds = ['raw','clean_hourly','clean_daily']
+################################################################################################
+####                    SETUP FOLDER DIRECTORIES FOR PROCESSED CRMS DATA                    ####
+################################################################################################
+if split_files == 'yes':
+    folds = ['raw','clean_hourly','clean_daily','stats']
 
     for fol in folds:
         if os.path.exists(r'%s\%s' % (topdir,fol)) == True:
@@ -56,6 +60,9 @@ else:
             os.mkdir(r'%s\%s' % (topdir,fol))
     
 
+################################################################################################
+####                    SPLIT BULK DOWNLOAD TABLE INTO INDIVIDUAL FILES                     ####
+################################################################################################
 
 # The below script parses the bulk data download into individual files - it requires that the file is structured such that the data for each CRMS site is lumped (vertically together)
 if split_files == 'yes':
@@ -112,45 +119,117 @@ if split_files == 'yes':
 else:
     print('using pre-split CRMS files saved in \raw folder')
 
+    
+
+################################################################################################
+####              READ IN SUBSIDENCE RATES AND SURVEY DATES FOR EACH CRMS SITE              ####
+################################################################################################
+if build_files == 'yes':
+    print('reading in subsidence rates and survey dates')
+    survey_sub_rates = np.genfromtxt(survey_subsidence_file,dtype='str',delimiter=',',skip_header=1)
+    survey_dates = {}
+    subsidence_rates = {}
+    for r in survey_sub_rates:
+        site = r[0]
+        dstr = r[1].split('-')
+        subrate = r[2]
+        survdate = dt.date(int(dstr[0]),int(dstr[1]),int(dstr[2]))
+        survey_dates[site] = survdate
+        subsidence_rates[site] = float(subrate)
+
+################################################################################################
+####                   READ IN GEOID CONVERSION FACTORS FOR EACH CRMS SITE                 ####
+################################################################################################
+if build_files == 'yes':
+    print('reading in geoid conversions')
+    gc = {}
+    with open(geoidfile,mode='rt') as gf:
+        for line in gf:
+            if line[0:4] == 'CRMS':
+                gc[line.split(',')[0]] = float(line.split(',')[1])
+
+########################################################################################################
+####    STEP THROUGH CRMS SITES AND PROCESS RAW DATA THEN SAVE INTO CLEAN HOURLY AND DAILY FILES    ####
+########################################################################################################
 ns = 0    
 for site in sites:
     ns += 1
-    print(' %03d/%03d  - %s' %(ns,len(sites),site) )
-
+    print('Processing site %03d/%03d  - %s' %(ns,len(sites),site) )
+    
+    crmssite = site.split('-')[0]
     
     rawpath = r'%s\raw\%s_raw.csv' % (topdir,site)
     hrpath = r'%s\clean_hourly\%s_hourly_English.csv' % (topdir,site)
     daypath = r'%s\clean_daily\%s_daily_English.csv' % (topdir,site)
 
-    if build_files == 'yes':
-        print('building new clean daily and hourly files to perform stats calculations')
-        print('  reading in geoid conversions')
-        gc = {}
-        with open(geoidfile,mode='rt') as gf:
-            for line in gf:
-                if line[0:4] == 'CRMS':
-                    gc[line.split(',')[0]] = float(line.split(',')[1])
+    ########################################################################
+    ####    PROCESS HOURLY DATA AND SAVE 'CLEAN' HOURLY OUTPUT FILE     ####
+    ########################################################################
 
-        print('  building hourly output file')
+    if build_files == 'yes':
+        print('  - building new clean hourly output file')
+
+        try:
+            sub = subsidence_rates[crmssite]
+            survey_date = survey_dates[crmssite]
+            note = '     - %s site was surveyed on %04d-%02d-%02d\n     - using subsidence rate of %0.2f mm/yr.' % (site,survey_date.year,survey_date.month,survey_date.day,sub)
+            sbf = 'c'
+        except:
+            sub = 0.0
+            survey_date = dt.date(yr_start,1,1)
+            note = '     - %s site does not have survey data\n     - no subsidence correction applied.' % site
+            sbf = ''
+            
+        print(note)
+
         with open(rawpath,mode='rt') as rawdata:
             with open(hrpath,mode='wt') as cleanhour:
-                clean_hourly_header = r'stationID,Date_mm/dd/yyyy,time_hh:mm:ss,timezone,salinity_ppt,salinity_flag(r=raw a=adjusted na=nodata),stage_ft_NAVD88_12A,stage_flag(r=raw; a=adjusted; s=datum shifted to geoid12a from 99; nd=used Geoid99 but no datum conversion found for site; na=nodata)'
+
+                clean_hourly_header = r'stationID,Date_mm/dd/yyyy,time_hh:mm:ss,timezone,salinity_ppt,salinity_flag(r=raw a=adjusted na=nodata),stage_ft_NAVD88_12B,stage_flag(r=raw data used/no adjustments made; a=adjusted; s=datum shifted to geoid12b from 99; c= subsidence corrected based; nd=used Geoid99 but no datum conversion found for site; na=nodata)'
+                
                 cleanhour.write('%s\n' % clean_hourly_header)
                 nr = 0
                 for allrow in rawdata:
                     if nr > 0:
                         row = allrow.split(',')
                         sid,d,t,tz,dat = row[0],row[1],row[2],row[3],row[19]
+                        
+                        ##########################################################################################
+                        ####    DETERMINE SUBSIDENCE OFFSET BASED ON SUBSIDENCE RATE AND TIME SINCE SURVEY    ####
+                        ##########################################################################################
+                        # subsidence offset sign convention: 
+                        #       this sub_offset value should be subtracted from raw data to reduce water surface 
+                        #       elevation if data is from after survey (e.g., gage has subsided and reading is
+                        #       higher than reality due to sunken gage) and to increase water surface elevation 
+                        #       if data is from before survey. The survey_date will be the time where the raw water
+                        #       surface elevation is assumed to be accurately tied into the survey/geoid conversion
+                        #       and sub_offset=0 when dtdate=survey_date
+                        
+                        dtdate = dt.date(int(d.split('/')[2]),int(d.split('/')[0]),int(d.split('/')[1]))        # this format requires the DATE column in CRMS raw data files to be of the format M/D/YYYY
+                        sub_offset = sub_conv*sub*(dtdate - survey_date).days/365.25            
+                        
+                        
+                        ##############################################################
+                        ####    DETERMINE GEOID DATUM CONVERSION FACTOR TO USE    ####
+                        ##############################################################
                         if dat == 'GEOID99':
                                 try:
                                     datc = gc[sid]
                                     dcf = 's'
                                 except:
-                                    datc = 0.0
-                                    dcf = 'nd'
+                                    try:
+                                        datc = gc[sid.split('-')[0]]
+                                        dcf = 's'
+                                    except:
+                                        datc = 0.0
+                                        dcf = 'nd'
                         else:
                                 datc = 0.0
                                 dcf = ''
+                        
+                        #########################################################
+                        ####    PROCESS HOURLY DATA AND APPLY CONVERSIONS    ####
+                        #########################################################
                         if row[10] != '': # try for adjusted salinity
                             sal = row[10]
                             sal_f = 'a'
@@ -166,11 +245,11 @@ for site in sites:
                         except:
                             sal = 'na'
                         if row[16] != '':
-                            stg_c = float(row[16]) + datc # try for adjusted stage and add datum conversion factor
-                            stg_f = 'a %s' % dcf
+                            stg_c = float(row[16]) + datc - sub_offset # try for adjusted stage and add datum and subsidence conversion factors
+                            stg_f = 'a %s %s' % (dcf,sbf)
                         elif row[15] != '':
-                            stg_c = float(row[15]) + datc # if no adjusted stage - use raw stage and add datum conversion factor
-                            stg_f = 'r %s' % dcf
+                            stg_c = float(row[15]) + datc - sub_offset # if no adjusted stage - use raw stage and add datum and subsidence conversion factors
+                            stg_f = 'r %s %s' % (dcf,sbf)
                         else:
                             stg_c = 'na'
                             stg_f ='na'
@@ -179,9 +258,11 @@ for site in sites:
                         cleanhour.write(writerow)
                     nr += 1
 
-            
+        ##########################################################################
+        ####    PREPARE DAILY OUTPUT FILE FROM 'CLEAN' HOURLY OUTPUT FILE     ####
+        ##########################################################################
     
-        print('  building daily summary file')
+        print('  - building new daily summary output file')
         with open(hrpath,mode='rt') as cleanhour:
             sal = {}
             salorder = {}
@@ -211,7 +292,6 @@ for site in sites:
                         
                 nr += 1
 
-
         with open(daypath,mode='wt') as sumdaily:
             daily_header = r'stationID,Date_mm/dd/yyyy,mean_salinity_ppt,median_salinity_ppt,min_salinity_ppt,max_salinity_ppt,stdev_salinity_ppt,ncount_salinity,mean_stage_ftNAVD88,median_stage_ftNAVD88,min_stage_ftNAVD88,max_stage_ftNAVD88,stdev_stage_ftNAVD88,ncount_stage_ftNAVD88'
             sumdaily.write('%s\n' % daily_header)
@@ -233,14 +313,18 @@ for site in sites:
         print('using existing clean hourly and daily files to perform stats calculations')
 
 
+    ##################################################
+    ####    CALCULATE STATISTICS FOR CRMS SITE    ####
+    ##################################################
+
     if ns == 1:
         write_hdr = 'True'
     else:
         write_hdr = 'False'
-#    print('  building stage summary stats tables')
-#    CRMS_stats.CRMS_hydro_stats(site,2006,2023,'stage_ft_NAVD88-g12b',topdir,write_hdr)
-#    print('  building salinity summary stats tables')
-#    CRMS_stats.CRMS_hydro_stats(site,2006,2023,'salinity_ppt',topdir,write_hdr)
-    print('  building moving window salinity table')
-    CRMS_stats.CRMS_moving_window(site,2006,2023,'salinity_ppt',topdir,write_hdr)   
+    print('  - calculating stage summary statistics')
+    CRMS_stats.CRMS_hydro_stats(site,yr_start,yr_end,'stage_ft_NAVD88-g12b',topdir,write_hdr)
+    print('  - calculating salinity summary statistics')
+    CRMS_stats.CRMS_hydro_stats(site,yr_start,yr_end,'salinity_ppt',topdir,write_hdr)
+    print('  - calculating moving window salinity summary statistics')
+    CRMS_stats.CRMS_moving_window(site,yr_start,yr_end,'salinity_ppt',topdir,write_hdr)   
 
